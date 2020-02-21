@@ -23,6 +23,8 @@ contract Milkchain {
 	
 	//definition of Events to communicate feedback on blockchain. E.g. return generated serial number
 	event ReturnSerialNumber(uint SerialNumber);
+	event Success(string text); //events are for demonstration purposes
+	event Failure(string text);
 	
 	//constructer - runs once when contract is deployed. Setup of admin account for supermarket
 	constructor () public {
@@ -78,6 +80,7 @@ contract Milkchain {
 		uint[] locationData; //currently not used
 		uint timeStampLSP; //timestamp of when the lsp has received the shipment
 		uint timeStampSupermarket; //timestamp of when the supermarket has received the shipment
+		uint timeStampDairyProduction; //timestamp of when the Dairy finished production
 		uint quantity; //total quantity after mixing multiple charges from Farmers
 	
 	}
@@ -207,6 +210,7 @@ contract Milkchain {
 	
 	//find functions to display detailed info of each account
 	
+	//Function to display account balance of tokens. Could be restricted to e.g. onlyAdmin
 	function X_getBalance(address _account) public view returns (uint _balance) {
         return balances[_account];
     }
@@ -232,30 +236,33 @@ contract Milkchain {
 		delete farmers[_farmer].certified; 
 		return true;
 	}
-	/*
+	
 	//function to remove a charge, restricted to supermarket.
 	function X_removeCharge(uint _serialNo) onlyAdmin public returns (bool success) {
-		delete charges[_serialNo];
+		delete chargesdairy[_serialNo];
 		return true;
 	}
-	
+
 	//function to display details of a certain charge. Split in 3 different functions as max. stack deepness is 7. Alternative solution with Array possible.
-	function X_findChargeAdresses (uint _serialNo) view public returns (address, address, address, address) { //,uint entfernt
-		return (charges[_serialNo].farmer, charges[_serialNo].dairy, charges[_serialNo].sensor, charges[_serialNo].lsp); 
+	function X_findChargeAdressesandSerialNoFarmers (uint _serialNo) view public returns (address, address, address, uint[] memory) { //,uint entfernt
+		return (chargesdairy[_serialNo].dairy, chargesdairy[_serialNo].sensor, chargesdairy[_serialNo].lsp, chargesdairy[_serialNo].listofSerialNoFarmer); 
 	}
 	
-	function X_findChargeApprovals(uint _serialNo) view public returns (bool, bool, bool) { //,uint entfernt
-		return (charges[_serialNo].approvaldairy, charges[_serialNo].approvalsupermarket, charges[_serialNo].approvallsp); 
+	function X_findkChargeofFarmer (uint _serialNoFarmer, uint _serialNo) view public returns (address, uint, uint, uint, bool){
+	    return (chargesdairy[_serialNo].chargesfarmer[_serialNoFarmer].sensor, chargesdairy[_serialNo].chargesfarmer[_serialNoFarmer].quantity,chargesdairy[_serialNo].chargesfarmer[_serialNoFarmer].timeStampCreation, chargesdairy[_serialNo].chargesfarmer[_serialNoFarmer].timeStampDairy, chargesdairy[_serialNo].chargesfarmer[_serialNoFarmer].approvaldairy);
+	    
+	}
+		
+	function X_findChargeApprovals(uint _serialNo) view public returns (bool, bool) { //,uint entfernt
+		return (chargesdairy[_serialNo].approvalsupermarket, chargesdairy[_serialNo].approvallsp); 
 	}
 	
-	function X_findChargeDetails(uint _serialNo) view public returns (uint, uint [] memory, uint, uint, uint, uint) { //,uint entfernt
-		return (charges[_serialNo].quantity, charges[_serialNo].locationData, charges[_serialNo].timeStampCreation, charges[_serialNo].timeStampDairy, charges[_serialNo].timeStampLSP, charges[_serialNo].timeStampSupermarket); 
+	
+	function X_findChargeDetails(uint _serialNo) view public returns (uint, uint, uint [] memory, uint, uint) { //,uint entfernt
+		return (chargesdairy[_serialNo].quantity, chargesdairy[_serialNo].timeStampDairyProduction, chargesdairy[_serialNo].locationData, chargesdairy[_serialNo].timeStampLSP, chargesdairy[_serialNo].timeStampSupermarket); 
 	}
 	
-	//Function to display account balance of tokens. Could be restricted to e.g. onlyAdmin
-	function X_getBalance(address _account) view public returns (uint _balance) {
-		return balances[_account];
-	}
+    /*
 	*/
 /*
 ************* 4. Actual Functionality *********
@@ -264,18 +271,19 @@ contract Milkchain {
 	//function to get the data of the sensor. could be triggered continously by a sensor connected to the blockchain in a defined timeframe, e.g. every 10 min.	
 	//currently only the highest Temp is stored. 
 	function X_getSensordata (int _highestTemp) public { //(, int _lowestTemp, int _highestPH, int _lowestPH)
-        if (_highestTemp > sensoren[msg.sender].highestTemp) {
-	    sensoren[msg.sender].highestTemp = _highestTemp;
-	    }
+        //if function deactivated due to demonstration purpose
+        //if (_highestTemp > sensoren[msg.sender].highestTemp) {
+	    sensoren[msg.sender].highestTemp = _highestTemp; //for demonstration, highesttemp is in reality current temperature. normally, 
+	    //}
 	    
 	    /* Deactivated, as our raspberry demo only transmits one temperature value and no pH.
-	    if (_lowestTemp >sensoren[msg.sender].lowestTemp) {
+	    if (_lowestTemp > sensoren[msg.sender].lowestTemp) {
 	    sensoren[msg.sender].lowestTemp = _lowestTemp;
 	    }
-	    if (_highestPH >sensoren[msg.sender].highestPH) {
+	    if (_highestPH > sensoren[msg.sender].highestPH) {
 	    sensoren[msg.sender].highestPH = _highestPH;
 	    }
-	    if (_lowestPH >sensoren[msg.sender].lowestPH) {
+	    if (_lowestPH > sensoren[msg.sender].lowestPH) {
 	    sensoren[msg.sender].lowestPH = _lowestPH;
 	    } */
 	    sensoren[msg.sender].timeStamp = block.timestamp; //time stamp of latest refresh 
@@ -337,12 +345,18 @@ contract Milkchain {
 	function I_approvalbyDairy (uint _serialNoFarmer, uint _serialNo) onlyDairy public {
 		  	//check if temp values are good. Option for pH values:  && sensoren[charges[_serialNo].sensor].highestPH < 7 && sensoren[charges[_serialNo].sensor].lowestPH > 6.4
 			//possibility to add multiple requirements of sensor data
-			require (sensoren[chargesdairy[serialNo].chargesfarmer[_serialNoFarmer].sensor].highestTemp < 9); ////Check if min max values are respected. For more options e.g.:  && sensoren[charges[_serialNo].sensor].highestPH < 7 && sensoren[charges[_serialNo].sensor].lowestPH > 6.4
+			//usage of if / else for demonstration purpose. normally use of "require" as in the following approval functions
+			if (sensoren[chargesdairy[serialNo].chargesfarmer[_serialNoFarmer].sensor].highestTemp < 9) { ////Check if min max values are respected. For more options e.g.:  && sensoren[charges[_serialNo].sensor].highestPH < 7 && sensoren[charges[_serialNo].sensor].lowestPH > 6.4
 		    	chargesdairy[_serialNo].dairy = msg.sender;
 				chargesdairy[_serialNo].chargesfarmer[_serialNoFarmer].timeStampDairy = block.timestamp;
 				Z_sendToken (msg.sender, chargesdairy[_serialNo].chargesfarmer[_serialNoFarmer].farmer, requests[_serialNoFarmer].payment); //direct payment function. Send promised payment from dairy to farmer
 	            chargesdairy[_serialNo].chargesfarmer[_serialNoFarmer].approvaldairy = true;
 	            chargesdairy[_serialNo].listofSerialNoFarmer.push(_serialNoFarmer);
+	         emit Success('Success Temperature is good');   
+			}
+			else {
+			    emit Failure('Temperature is too high');
+			}
 	}
 	
 	function J_finishProductionbyDairy (address _newSensor, uint _serialNo) onlyDairy public {
@@ -353,6 +367,7 @@ contract Milkchain {
         }
 	    chargesdairy[_serialNo].sensor = _newSensor; //old sensors are replaced by new one for the total charge
 	    chargesdairy[_serialNo].quantity = sum_; //total quantity stored
+	    chargesdairy[_serialNo].timeStampDairyProduction = block.timestamp;
 	}
 	
 
@@ -361,6 +376,7 @@ contract Milkchain {
 		    	chargesdairy[_serialNo].lsp = msg.sender;
 				chargesdairy[_serialNo].timeStampLSP = block.timestamp;
 				chargesdairy[_serialNo].approvallsp = true;
+	
 	}
 	
 	function L_approvalbySupermarket (uint _serialNo) onlyAdmin public {
