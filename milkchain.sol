@@ -386,6 +386,5 @@ contract Milkchain {
 				Z_sendToken (msg.sender, chargesdairy[_serialNo].dairy, requests[_serialNo].payment); //payment from Supermarket to Dairy
 				Z_sendToken (msg.sender, chargesdairy[_serialNo].lsp, 10); //payment from Supermarket to LSP. Currently fixed value, can be changed / calculated with quantity and distance
                 chargesdairy[_serialNo].approvalsupermarket = true;
-	}
-	
+	}	
 }
